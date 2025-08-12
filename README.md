@@ -33,5 +33,8 @@ If any of the keywords appear in a CV, a green checkmark (✅) is displayed next
 2. Install required Python packages:
    ```bash
    pip install pdfplumber spacy
+3. Install French package:
+   
   ```bash
    python -m spacy download fr_core_news_sm
+
