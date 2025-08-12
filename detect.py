@@ -4,6 +4,7 @@ import pdfplumber
 import logging
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+import ttkbootstrap as tb
 import os
 
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
@@ -38,6 +39,14 @@ def detect_name_with_fallback(text):
 
     return None
 
+def clear_treeview():
+    for item in treeview.get_children():
+        treeview.delete(item)
+
+def insert_row(values, index):
+    tag = 'evenrow' if index % 2 == 0 else 'oddrow'
+    treeview.insert("", "end", values=values, tags=(tag,))
+
 def open_folder():
     folderpath = filedialog.askdirectory(title="Select folder containing CV PDFs")
     if not folderpath:
@@ -57,9 +66,10 @@ def open_folder():
             messagebox.showinfo("No PDFs found", "No PDF files found in the selected folder.")
             set_processing(False)
             return
-        
-        all_results = []
-        for pdf_file in pdf_files:
+
+        clear_treeview()
+
+        for idx, pdf_file in enumerate(pdf_files):
             full_path = os.path.join(folderpath, pdf_file)
             cv_text = extract_text_from_pdf(full_path)
             name = detect_name_with_fallback(cv_text)
@@ -69,14 +79,9 @@ def open_folder():
             if has_keywords:
                 name_display += " ✅"
 
-            result_lines = [f"File: {pdf_file}", f"Candidate Name: {name_display}", "Keyword counts:"]
-            for kw in keywords:
-                count = count_keyword(cv_text, kw)
-                result_lines.append(f"  '{kw}': {count} times")
-            result_lines.append("")  # empty line between files
-            all_results.extend(result_lines)
-        
-        set_result_text("\n".join(all_results))
+            counts_str = ", ".join(f"'{kw}': {count_keyword(cv_text, kw)}" for kw in keywords)
+            insert_row((pdf_file, name_display, counts_str), idx)
+
         set_processing(False)
     except Exception as e:
         set_processing(False)
@@ -106,22 +111,15 @@ def open_single_file():
         if has_keywords:
             name_display += " ✅"
         
-        results = [f"Candidate Name: {name_display}", "Keyword counts:"]
-        for kw in keywords:
-            count = count_keyword(cv_text, kw)
-            results.append(f"  '{kw}': {count} times")
-        
-        set_result_text("\n".join(results))
+        counts_str = ", ".join(f"'{kw}': {count_keyword(cv_text, kw)}" for kw in keywords)
+
+        clear_treeview()
+        insert_row((os.path.basename(filepath), name_display, counts_str), 0)
+
         set_processing(False)
     except Exception as e:
         set_processing(False)
         messagebox.showerror("Error", f"Failed to process file:\n{e}")
-
-def set_result_text(text):
-    result_text.config(state='normal')
-    result_text.delete(1.0, tk.END)
-    result_text.insert(tk.END, text)
-    result_text.config(state='disabled')
 
 def set_processing(is_processing):
     if is_processing:
@@ -135,21 +133,12 @@ def set_processing(is_processing):
         open_file_btn.config(state='normal')
         open_folder_btn.config(state='normal')
 
-# GUI setup
-root = tk.Tk()
+# --- GUI Setup ---
+root = tb.Window(themename="litera")
 root.title("CV Analyzer")
-root.geometry("700x500")
-root.configure(bg="#f5f5f5")
+root.geometry("800x550")
 
-style = ttk.Style()
-style.theme_use('clam')
-
-style.configure('TButton', font=('Segoe UI', 11), padding=6)
-style.configure('TLabel', background="#f5f5f5", font=('Segoe UI', 11))
-style.configure('TEntry', font=('Segoe UI', 11))
-style.configure('Horizontal.TProgressbar', thickness=10)
-
-frame = tk.Frame(root, bg="#f5f5f5", padx=20, pady=20)
+frame = ttk.Frame(root, padding=20)
 frame.pack(fill="both", expand=True)
 
 keyword_label = ttk.Label(frame, text="Keywords to count (comma separated):")
@@ -159,29 +148,33 @@ keyword_entry = ttk.Entry(frame)
 keyword_entry.insert(0, "React, Docker, Kubernetes")
 keyword_entry.grid(row=0, column=1, sticky="ew", padx=(10,0))
 
-buttons_frame = tk.Frame(frame, bg="#f5f5f5")
+buttons_frame = ttk.Frame(frame)
 buttons_frame.grid(row=1, column=0, columnspan=2, pady=15)
 
-open_file_btn = ttk.Button(buttons_frame, text="Open Single CV PDF", command=open_single_file)
+open_file_btn = tb.Button(buttons_frame, text="Open Single CV PDF", bootstyle="success", command=open_single_file)
 open_file_btn.pack(side="left", padx=5)
 
-open_folder_btn = ttk.Button(buttons_frame, text="Open Folder with CV PDFs", command=open_folder)
+open_folder_btn = tb.Button(buttons_frame, text="Open Folder with CV PDFs", bootstyle="primary", command=open_folder)
 open_folder_btn.pack(side="left", padx=5)
 
-progress_bar = ttk.Progressbar(frame, mode='indeterminate', style='Horizontal.TProgressbar')
+progress_bar = ttk.Progressbar(frame, mode='indeterminate', length=400)
 progress_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
 progress_bar.grid_remove()
 
-result_frame = tk.Frame(frame, bg="#eaeaea", bd=1, relief="sunken")
-result_frame.grid(row=3, column=0, columnspan=2, sticky="nsew")
+columns = ("filename", "candidate_name", "keyword_counts")
+treeview = tb.Treeview(frame, columns=columns, show="headings", height=18)
+treeview.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(10,0))
 
-result_text = tk.Text(result_frame, wrap="word", font=("Consolas", 11), state='disabled', bg="white")
-result_text.pack(side="left", fill="both", expand=True)
+treeview.heading("filename", text="File Name")
+treeview.heading("candidate_name", text="Candidate Name")
+treeview.heading("keyword_counts", text="Keyword Counts")
 
-scrollbar = ttk.Scrollbar(result_frame, orient="vertical", command=result_text.yview)
-scrollbar.pack(side="right", fill="y")
+treeview.column("filename", width=250)
+treeview.column("candidate_name", width=220)
+treeview.column("keyword_counts", width=300)
 
-result_text['yscrollcommand'] = scrollbar.set
+treeview.tag_configure('oddrow', background='white')
+treeview.tag_configure('evenrow', background='#cce6ff')  # light blue
 
 frame.columnconfigure(1, weight=1)
 frame.rowconfigure(3, weight=1)
