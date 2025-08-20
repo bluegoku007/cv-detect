@@ -7,6 +7,7 @@ from tkinter import filedialog, messagebox, ttk
 import ttkbootstrap as tb
 import os
 import csv
+import webbrowser
 
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 nlp = spacy.load("fr_core_news_sm")
@@ -52,9 +53,15 @@ def clear_treeview():
     for item in treeview.get_children():
         treeview.delete(item)
 
-def insert_row(values, index):
+def insert_row(values, index, file_path):
     tag = 'evenrow' if index % 2 == 0 else 'oddrow'
-    treeview.insert("", "end", values=values, tags=(tag,))
+    treeview.insert("", "end", values=values, tags=(tag,), iid=file_path)
+
+def calculate_score(text, keywords):
+    if not keywords:
+        return 0
+    matched = sum(1 for kw in keywords if count_keyword(text, kw) > 0)
+    return round((matched / len(keywords)) * 100, 2)
 
 def open_folder():
     folderpath = filedialog.askdirectory(title="Select folder containing CV PDFs")
@@ -91,7 +98,9 @@ def open_folder():
                 name_display += " ✅"
 
             counts_str = ", ".join(f"'{kw}': {count_keyword(cv_text, kw)}" for kw in keywords)
-            insert_row((pdf_file, name_display, email, phone, counts_str), idx)
+            score = calculate_score(cv_text, keywords)
+
+            insert_row((pdf_file, name_display, email, phone, counts_str, f"{score}%"), idx, full_path)
 
         set_processing(False)
     except Exception as e:
@@ -126,9 +135,10 @@ def open_single_file():
             name_display += " ✅"
         
         counts_str = ", ".join(f"'{kw}': {count_keyword(cv_text, kw)}" for kw in keywords)
+        score = calculate_score(cv_text, keywords)
 
         clear_treeview()
-        insert_row((os.path.basename(filepath), name_display, email, phone, counts_str), 0)
+        insert_row((os.path.basename(filepath), name_display, email, phone, counts_str, f"{score}%"), 0, filepath)
 
         set_processing(False)
     except Exception as e:
@@ -151,13 +161,23 @@ def export_to_csv():
     try:
         with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["File Name", "Candidate Name", "Email", "Phone", "Keyword Counts"])
+            writer.writerow(["File Name", "Candidate Name", "Email", "Phone", "Keyword Counts", "Score"])
             for row_id in treeview.get_children():
                 row = treeview.item(row_id)["values"]
                 writer.writerow(row)
         messagebox.showinfo("Exported", f"Results exported to {filepath}")
     except Exception as e:
         messagebox.showerror("Error", f"Failed to export CSV:\n{e}")
+
+def on_double_click(event):
+    item_id = treeview.selection()
+    if not item_id:
+        return
+    file_path = item_id[0]  # l’iid contient le chemin complet du fichier
+    if os.path.exists(file_path):
+        webbrowser.open_new(file_path)
+    else:
+        messagebox.showerror("Error", f"File not found:\n{file_path}")
 
 def set_processing(is_processing):
     if is_processing:
@@ -176,7 +196,7 @@ def set_processing(is_processing):
 # --- GUI Setup ---
 root = tb.Window(themename="litera")
 root.title("CV Analyzer")
-root.geometry("950x550")
+root.geometry("1100x600")
 
 frame = ttk.Frame(root, padding=20)
 frame.pack(fill="both", expand=True)
@@ -204,7 +224,7 @@ progress_bar = ttk.Progressbar(frame, mode='indeterminate', length=400)
 progress_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
 progress_bar.grid_remove()
 
-columns = ("filename", "candidate_name", "email", "phone", "keyword_counts")
+columns = ("filename", "candidate_name", "email", "phone", "keyword_counts", "score")
 treeview = tb.Treeview(frame, columns=columns, show="headings", height=18)
 treeview.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(10,0))
 
@@ -213,17 +233,21 @@ treeview.heading("candidate_name", text="Candidate Name")
 treeview.heading("email", text="Email")
 treeview.heading("phone", text="Phone")
 treeview.heading("keyword_counts", text="Keyword Counts")
+treeview.heading("score", text="Relevance Score")
 
 treeview.column("filename", width=200)
 treeview.column("candidate_name", width=180)
 treeview.column("email", width=200)
 treeview.column("phone", width=120)
 treeview.column("keyword_counts", width=250)
+treeview.column("score", width=120)
 
 treeview.tag_configure('oddrow', background='white')
 treeview.tag_configure('evenrow', background='#cce6ff')  # light blue
 
 frame.columnconfigure(1, weight=1)
 frame.rowconfigure(3, weight=1)
+
+treeview.bind("<Double-1>", on_double_click)
 
 root.mainloop()
