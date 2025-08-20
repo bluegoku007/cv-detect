@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import ttkbootstrap as tb
 import os
+import csv
 
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 nlp = spacy.load("fr_core_news_sm")
@@ -121,17 +122,43 @@ def open_single_file():
         set_processing(False)
         messagebox.showerror("Error", f"Failed to process file:\n{e}")
 
+def export_to_csv():
+    if not treeview.get_children():
+        messagebox.showinfo("No Data", "No results to export.")
+        return
+    
+    filepath = filedialog.asksaveasfilename(
+        defaultextension=".csv",
+        filetypes=[("CSV files", "*.csv")],
+        title="Save results as CSV"
+    )
+    if not filepath:
+        return
+    
+    try:
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["File Name", "Candidate Name", "Keyword Counts"])
+            for row_id in treeview.get_children():
+                row = treeview.item(row_id)["values"]
+                writer.writerow(row)
+        messagebox.showinfo("Exported", f"Results exported to {filepath}")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to export CSV:\n{e}")
+
 def set_processing(is_processing):
     if is_processing:
         progress_bar.grid()
         progress_bar.start()
         open_file_btn.config(state='disabled')
         open_folder_btn.config(state='disabled')
+        export_btn.config(state='disabled')
     else:
         progress_bar.stop()
         progress_bar.grid_remove()
         open_file_btn.config(state='normal')
         open_folder_btn.config(state='normal')
+        export_btn.config(state='normal')
 
 # --- GUI Setup ---
 root = tb.Window(themename="litera")
@@ -156,6 +183,9 @@ open_file_btn.pack(side="left", padx=5)
 
 open_folder_btn = tb.Button(buttons_frame, text="Open Folder with CV PDFs", bootstyle="primary", command=open_folder)
 open_folder_btn.pack(side="left", padx=5)
+
+export_btn = tb.Button(buttons_frame, text="Export Results", bootstyle="info", command=export_to_csv)
+export_btn.pack(side="left", padx=5)
 
 progress_bar = ttk.Progressbar(frame, mode='indeterminate', length=400)
 progress_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
