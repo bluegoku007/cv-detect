@@ -40,6 +40,14 @@ def detect_name_with_fallback(text):
 
     return None
 
+def extract_email(text):
+    match = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", text)
+    return match.group(0) if match else "Not found"
+
+def extract_phone(text):
+    match = re.search(r"(?:\+?\d{1,3}[ .-]?)?(?:\(?\d{2,3}\)?[ .-]?)?\d{2,3}(?:[ .-]?\d{2,3}){2,3}", text)
+    return match.group(0) if match else "Not found"
+
 def clear_treeview():
     for item in treeview.get_children():
         treeview.delete(item)
@@ -74,6 +82,8 @@ def open_folder():
             full_path = os.path.join(folderpath, pdf_file)
             cv_text = extract_text_from_pdf(full_path)
             name = detect_name_with_fallback(cv_text)
+            email = extract_email(cv_text)
+            phone = extract_phone(cv_text)
 
             has_keywords = any(count_keyword(cv_text, kw) > 0 for kw in keywords)
             name_display = (name or "Not found")
@@ -81,7 +91,7 @@ def open_folder():
                 name_display += " ✅"
 
             counts_str = ", ".join(f"'{kw}': {count_keyword(cv_text, kw)}" for kw in keywords)
-            insert_row((pdf_file, name_display, counts_str), idx)
+            insert_row((pdf_file, name_display, email, phone, counts_str), idx)
 
         set_processing(False)
     except Exception as e:
@@ -107,6 +117,9 @@ def open_single_file():
             return
         
         name = detect_name_with_fallback(cv_text)
+        email = extract_email(cv_text)
+        phone = extract_phone(cv_text)
+
         has_keywords = any(count_keyword(cv_text, kw) > 0 for kw in keywords)
         name_display = (name or "Not found")
         if has_keywords:
@@ -115,7 +128,7 @@ def open_single_file():
         counts_str = ", ".join(f"'{kw}': {count_keyword(cv_text, kw)}" for kw in keywords)
 
         clear_treeview()
-        insert_row((os.path.basename(filepath), name_display, counts_str), 0)
+        insert_row((os.path.basename(filepath), name_display, email, phone, counts_str), 0)
 
         set_processing(False)
     except Exception as e:
@@ -138,7 +151,7 @@ def export_to_csv():
     try:
         with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["File Name", "Candidate Name", "Keyword Counts"])
+            writer.writerow(["File Name", "Candidate Name", "Email", "Phone", "Keyword Counts"])
             for row_id in treeview.get_children():
                 row = treeview.item(row_id)["values"]
                 writer.writerow(row)
@@ -163,7 +176,7 @@ def set_processing(is_processing):
 # --- GUI Setup ---
 root = tb.Window(themename="litera")
 root.title("CV Analyzer")
-root.geometry("800x550")
+root.geometry("950x550")
 
 frame = ttk.Frame(root, padding=20)
 frame.pack(fill="both", expand=True)
@@ -191,17 +204,21 @@ progress_bar = ttk.Progressbar(frame, mode='indeterminate', length=400)
 progress_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
 progress_bar.grid_remove()
 
-columns = ("filename", "candidate_name", "keyword_counts")
+columns = ("filename", "candidate_name", "email", "phone", "keyword_counts")
 treeview = tb.Treeview(frame, columns=columns, show="headings", height=18)
 treeview.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(10,0))
 
 treeview.heading("filename", text="File Name")
 treeview.heading("candidate_name", text="Candidate Name")
+treeview.heading("email", text="Email")
+treeview.heading("phone", text="Phone")
 treeview.heading("keyword_counts", text="Keyword Counts")
 
-treeview.column("filename", width=250)
-treeview.column("candidate_name", width=220)
-treeview.column("keyword_counts", width=300)
+treeview.column("filename", width=200)
+treeview.column("candidate_name", width=180)
+treeview.column("email", width=200)
+treeview.column("phone", width=120)
+treeview.column("keyword_counts", width=250)
 
 treeview.tag_configure('oddrow', background='white')
 treeview.tag_configure('evenrow', background='#cce6ff')  # light blue
