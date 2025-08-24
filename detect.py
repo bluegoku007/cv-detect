@@ -57,11 +57,33 @@ def insert_row(values, index, file_path):
     tag = 'evenrow' if index % 2 == 0 else 'oddrow'
     treeview.insert("", "end", values=values, tags=(tag,), iid=file_path)
 
-def calculate_score(text, keywords):
+# --- Nouvelle fonction : parsing des mots-clés avec poids ---
+def parse_keywords(entry_text):
+    """
+    Exemple d’entrée: "React:2, Docker:1, Kubernetes:3"
+    Retourne: {"React":2, "Docker":1, "Kubernetes":3}
+    """
+    keywords = {}
+    for part in entry_text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            kw, weight = part.split(":", 1)
+            try:
+                keywords[kw.strip()] = float(weight.strip())
+            except ValueError:
+                keywords[kw.strip()] = 1.0
+        else:
+            keywords[part.strip()] = 1.0
+    return keywords
+
+def calculate_weighted_score(text, keywords):
     if not keywords:
         return 0
-    matched = sum(1 for kw in keywords if count_keyword(text, kw) > 0)
-    return round((matched / len(keywords)) * 100, 2)
+    total_weight = sum(keywords.values())
+    matched_weight = sum(weight for kw, weight in keywords.items() if count_keyword(text, kw) > 0)
+    return round((matched_weight / total_weight) * 100, 2)
 
 def open_folder():
     folderpath = filedialog.askdirectory(title="Select folder containing CV PDFs")
@@ -71,7 +93,7 @@ def open_folder():
         set_processing(True)
         root.update_idletasks()
 
-        keywords = [kw.strip() for kw in keyword_entry.get().split(",") if kw.strip()]
+        keywords = parse_keywords(keyword_entry.get())
         if not keywords:
             messagebox.showwarning("Input needed", "Please enter at least one keyword.")
             set_processing(False)
@@ -97,8 +119,8 @@ def open_folder():
             if has_keywords:
                 name_display += " ✅"
 
-            counts_str = ", ".join(f"'{kw}': {count_keyword(cv_text, kw)}" for kw in keywords)
-            score = calculate_score(cv_text, keywords)
+            counts_str = ", ".join(f"'{kw}': {count_keyword(cv_text, kw)} (w={weight})" for kw, weight in keywords.items())
+            score = calculate_weighted_score(cv_text, keywords)
 
             insert_row((pdf_file, name_display, email, phone, counts_str, f"{score}%"), idx, full_path)
 
@@ -119,7 +141,7 @@ def open_single_file():
         root.update_idletasks()
 
         cv_text = extract_text_from_pdf(filepath)
-        keywords = [kw.strip() for kw in keyword_entry.get().split(",") if kw.strip()]
+        keywords = parse_keywords(keyword_entry.get())
         if not keywords:
             messagebox.showwarning("Input needed", "Please enter at least one keyword.")
             set_processing(False)
@@ -134,8 +156,8 @@ def open_single_file():
         if has_keywords:
             name_display += " ✅"
         
-        counts_str = ", ".join(f"'{kw}': {count_keyword(cv_text, kw)}" for kw in keywords)
-        score = calculate_score(cv_text, keywords)
+        counts_str = ", ".join(f"'{kw}': {count_keyword(cv_text, kw)} (w={weight})" for kw, weight in keywords.items())
+        score = calculate_weighted_score(cv_text, keywords)
 
         clear_treeview()
         insert_row((os.path.basename(filepath), name_display, email, phone, counts_str, f"{score}%"), 0, filepath)
@@ -201,11 +223,11 @@ root.geometry("1100x600")
 frame = ttk.Frame(root, padding=20)
 frame.pack(fill="both", expand=True)
 
-keyword_label = ttk.Label(frame, text="Keywords to count (comma separated):")
+keyword_label = ttk.Label(frame, text="Keywords to count (format: kw:weight, kw:weight):")
 keyword_label.grid(row=0, column=0, sticky="w")
 
 keyword_entry = ttk.Entry(frame)
-keyword_entry.insert(0, "React, Docker, Kubernetes")
+keyword_entry.insert(0, "React:2, Docker:1, Kubernetes:3")
 keyword_entry.grid(row=0, column=1, sticky="ew", padx=(10,0))
 
 buttons_frame = ttk.Frame(frame)
